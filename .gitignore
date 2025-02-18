@@ -1,3 +1,7 @@
+# Images / data
+pokemon_data/card_data
+pokemon_data/images
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
