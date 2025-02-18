@@ -4,6 +4,8 @@ from bs4 import BeautifulSoup
 from PIL import Image
 from io import BytesIO
 import time
+import Pokemon
+import re
 
 BASE_URL = "https://pocket.limitlesstcg.com/cards"
 SCRIPT_BASE_DIR = os.path.dirname(os.path.abspath(__file__))  
@@ -11,7 +13,7 @@ CARD_DATA_BASE_DIR = os.path.join(SCRIPT_BASE_DIR, "../pokemon_data/card_data")
 IMAGES_BASE_DIR = os.path.join(SCRIPT_BASE_DIR, "../pokemon_data/images")  
 os.makedirs(IMAGES_BASE_DIR, exist_ok=True) 
 os.makedirs(CARD_DATA_BASE_DIR, exist_ok=True) 
-
+ 
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Referer": "https://pocket.limitlesstcg.com" 
@@ -64,14 +66,12 @@ def scrape_pokemon_data(soup, urls):
             time.sleep(1)
 
             for link in links_inside:
-                #print(f"Link: {link}")
                 postfix = link.lstrip("/cards")
                 individual_pokemon_url = BASE_URL + "/" + postfix
-                #print(f"Individual pokemon link: {individual_pokemon_url}")
                 response = requests.get(individual_pokemon_url, headers=headers)
                 soup = BeautifulSoup(response.text, "html.parser")
-                
                 # We are now on a specific pokemon page such as "https://pocket.limitlesstcg.com/cards/A2/1" - Oddish from Space-Time Smackdown (A2)
+                
                 if response.status_code == 200:
                     print(f"\033[4m{individual_pokemon_url}\033[0m Status code: \033[32m{response.status_code}\033[0m")
                     _get_pokemon_information(soup, expansion_name, image_dir, postfix)
@@ -134,22 +134,28 @@ def get_json_info(soup):
         card_type, hp = tokenize_card_title(title)
  
         stage_tok = soup.find(class_="card-text-type").text.strip().split("-")
-        stage = stage_tok[1].strip()          
-        
-        print(f"\033[31m{name}\033[0m, "
-              f"\033[32mExpansion = {expansion}\033[0m, "
-              f"\033[34mType = {card_type}\033[0m, "
-              f"\033[33mHP = {hp}\033[0m,",
-              f"\033[96mStage = {stage}\033[0m")
+        stage = stage_tok[1].strip()
+
+        token = soup.find(class_="card-text-wrr").text.strip()
+        pattern = r"Weakness:\s*(\S+).*?Retreat:\s*(\d+)"
+        match = re.search(pattern, token, re.DOTALL)
+        if match:
+            weakness = match.group(1)  
+            retreat = match.group(2) 
+        else:
+            print("No match found in:", token)
         
         attack_infos = soup.find_all("p", class_="card-text-attack-info")
-        abilities = {}
-        i = 1
+        abilities = []
+        energy_dict_list = []
 
         for attack in attack_infos:
+            ability_dict = {}
             text = attack.get_text(separator=" ", strip=True) 
             words = text.split()  
+            
             energy_dict = get_energy_cost(words[0])
+            energy_dict_list.append(energy_dict)
 
             words = words[1:]
 
@@ -160,18 +166,24 @@ def get_json_info(soup):
                 ability_name = "Null"
                 ability_damage = 0
 
-            abilities[ability_name] = ability_damage 
+            ability_dict[ability_name] = ability_damage 
+            abilities.append(ability_dict)
 
-            print(f"\u001b[35mAbility {i}: \u001b[0m{abilities}", end = " ")  # Output: {'Blot': '10', 'Flame Burst': '30'}
-            display_energy_cost(energy_dict)
-            i += 1
-            abilities = {}
-            
+        print(f"\033[31m{name}\033[0m, "
+              f"\033[32mExpansion = {expansion}\033[0m, "
+              f"\033[34mType = {card_type}\033[0m, "
+              f"\033[33mHP = {hp}\033[0m,",
+              f"\033[96mStage = {stage}\033[0m,",
+              f"\033[96mWeakness = {weakness}\033[0m,",
+              f"\033[96mRetreat = {retreat}\033[0m,"
+              )
+
+        print(f"\u001b[35mAbilities: \u001b[0m{abilities}", end = " ")  # Output: {'Blot': '10', 'Flame Burst': '30'}
+        display_energy_cost(energy_dict_list)
 
     except Exception as e:
-        print(f"Missing information, something went wrong storing json: {e}")
+        print(f"Missing information, something went wrong {e}")
 
-    # Populate json file (this part still needs implementation)
     return
 
 def tokenize_card_title(title):
@@ -221,35 +233,50 @@ def get_energy_cost(energy_token):
             case _:
                 continue  # Ignore unknown energy types or symbols
 
-    return energy_dict
-
-def display_energy_cost(energy_dict):
-    energy_colors = {
-    "Grass": "\033[32m",     # Green
-    "Fire": "\033[31m",      # Red
-    "Water": "\033[34m",     # Blue
-    "Lightning": "\033[33m", # Yellow
-    "Psychic": "\033[35m",   # Magenta
-    "Fighting": "\033[36m",  # Cyan
-    "Darkness": "\033[90m",  # Dark Gray
-    "Metal": "\033[37m",     # White
-    "Dragon": "\033[94m",    # Light Blue
-    "Colorless": "\033[0m",  # Reset (no color)
-    }
-
     try:
-        string = "Energy Costs: "
-
+        parsed_dict = {}
         for key, value in energy_dict.items():
-            if value >= 1:  # Only include energy types with value >= 1
-                string += f"{energy_colors.get(key, '')}{key}: {value}\033[0m "  # Use color code for the key
+            if value >= 1:               
+                parsed_dict[key] = value  
 
-        print(string)  # Output the string with the color formatting
+        #print(f"Parsed dict = {parsed_dict}")
+    except Exception as e:
+        print("Could not parse energy_list_dict", e)
 
-    except Exception as a:
-        print("Error displaying energy costs", a)
+    return parsed_dict
 
-    return
+def display_energy_cost(energy_dict_list):
+    # ANSI color mapping for energy types
+    energy_colors = {
+        "Grass": "\033[32m",     # Green
+        "Fire": "\033[31m",      # Red
+        "Water": "\033[34m",     # Blue
+        "Lightning": "\033[33m", # Yellow
+        "Psychic": "\033[35m",   # Magenta
+        "Fighting": "\033[36m",  # Cyan
+        "Darkness": "\033[90m",  # Dark Gray
+        "Metal": "\033[37m",     # White
+        "Dragon": "\033[94m",    # Light Blue
+        "Colorless": "\033[0m",  # Reset (default color)
+    }
+    
+    # Build a string that looks like a list of dictionaries
+    output = "["
+    for i, energy_dict in enumerate(energy_dict_list):
+        output += "{"
+        # Get all items and process them one by one.
+        items = []
+        for key, value in energy_dict.items():
+            # Wrap only the key with its ANSI color code (the value remains unchanged)
+            colored_key = f"{energy_colors.get(key, '')}{key}\033[0m"
+            items.append(f"'{colored_key}': {value}")
+        output += ", ".join(items)
+        output += "}"
+        if i < len(energy_dict_list) - 1:
+            output += ", "
+    output += "]"
+    
+    print(output)
 
 if __name__=="__main__":
     main()
