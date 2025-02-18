@@ -135,7 +135,6 @@ def get_json_info(soup):
  
         stage_tok = soup.find(class_="card-text-type").text.strip().split("-")
         stage = stage_tok[1].strip()          
-        print(stage)
         
         print(f"\033[31m{name}\033[0m, "
               f"\033[32mExpansion = {expansion}\033[0m, "
