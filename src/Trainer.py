@@ -1,8 +1,8 @@
 import json
 import os
 
-class Pokemon:
-    def __init__(self, name: str, expansion: str, hp: int, pokemon_type: str, rarity: str, stage: str, abilities_dict: dict, ability_description_array: list, weakness: str, retreat: int, illustrator: str):
+class Trainer:
+    def __init__(self, name: str, expansion: str, hp: int, pokemon_type: str, stage: str, abilities_dict: dict, ability_description_array: list, weakness: str, retreat: int, illustrator: str):
         self.name = name
         self.expansion = expansion
         self.hp = hp
