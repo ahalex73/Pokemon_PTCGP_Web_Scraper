@@ -4,8 +4,9 @@ from bs4 import BeautifulSoup
 from PIL import Image
 from io import BytesIO
 import time
-import Pokemon 
 import re
+from Pokemon import Pokemon
+from Trainer import Trainer
 
 BASE_URL = "https://pocket.limitlesstcg.com/cards"
 SCRIPT_BASE_DIR = os.path.dirname(os.path.abspath(__file__))  
@@ -66,9 +67,7 @@ colors = {
 
 }
 
-
 def main():
-
     try: 
         while True:
             response = requests.get(BASE_URL, headers=headers)
@@ -80,11 +79,10 @@ def main():
             urls = get_urls(soup)
             scrape_pokemon_data(soup, urls)
 
-            print("\n\n\n\t\t\tScraping complete!\n\n\n")
+            print("\n\t\t\t\t Scraping Complete! \U0001F44B\n")
             return False
 
     except KeyboardInterrupt:
-        # Handle the Ctrl+C interruption
         print("\n\t\t\t\t\U0001F44B\n")
 
 def get_urls(soup):
@@ -112,7 +110,7 @@ def scrape_pokemon_data(soup, urls):
         os.makedirs(expansion_card_info_dir, exist_ok=True) 
 
         if target_div:
-            # These links are all of the pokemon listed for each expansion
+            # These links are all of the pokemon listed for each specific expansion
             # but we need to go to each specific associated webpage for each to scrape all of the data
 
             links_inside = [a["href"] for a in target_div.find_all("a")]  # Get all individual pokemon links
@@ -127,8 +125,7 @@ def scrape_pokemon_data(soup, urls):
                 # We are now on a specific pokemon page such as "https://pocket.limitlesstcg.com/cards/A2/1" - Oddish from Space-Time Smackdown (A2)
                 
                 if response.status_code == 200:
-                    #print(f"\U0001F916 {colors['Underlined Light Gray']}{individual_pokemon_url}{colors['Reset']}")
-                    _get_pokemon_information(soup, expansion_name, expansion_image_dir, postfix)
+                    scrape_and_store(soup, expansion_name, expansion_image_dir, postfix)
 
                     response.close()
                 else:
@@ -140,7 +137,7 @@ def scrape_pokemon_data(soup, urls):
 
     return False
 
-def _get_pokemon_information(soup, expansion_name, expansion_image_dir, postfix):
+def scrape_and_store(soup, expansion_name, expansion_image_dir, postfix):
     img = soup.find(class_="card shadow resp-w")
     pokemon_name = soup.find(class_= "card-text-name").text
 
@@ -151,90 +148,52 @@ def _get_pokemon_information(soup, expansion_name, expansion_image_dir, postfix)
         if img_response.status_code == 200:
             img_data = BytesIO(img_response.content)
 
-            try:
-                postfix = postfix.replace("/", "_")
-                pokemon_name = pokemon_name.replace(" ", "-")
+            # try:
+            postfix = postfix.replace("/", "_")
+            pokemon_name = pokemon_name.replace(" ", "-")
 
-                webp_path = os.path.join(expansion_image_dir, expansion_name, f"{pokemon_name}_{postfix}.webp")
-                
-                # Gather json for pokemon
-                json_path = os.path.join(CARD_DATA_BASE_DIR, expansion_name, ".json")
-                get_json_info(soup, json_path)
+            webp_path = os.path.join(expansion_image_dir, f"{pokemon_name}_{postfix}.webp")
+            json_path = os.path.join(CARD_DATA_BASE_DIR, expansion_name, ".json")
 
-                if os.path.exists(webp_path):
-                    #print(f"{colors['Light Gray']}Image {pokemon_name}_{postfix}.webp already exists, skipping download.{colors['Reset']}\n")
-                    return  
+            get_json_info(soup, json_path)
 
-                else:
-                    os.makedirs(os.path.dirname(webp_path), exist_ok=True)
+            if os.path.exists(webp_path):
+                #print(f"{colors['Light Gray']}Image {pokemon_name}_{postfix}.webp already exists, skipping download.{colors['Reset']}\n")
+                return  
 
-                    print(f"Saving image as {webp_path}")
-                    img_obj = Image.open(img_data)
-                    img_obj.save(webp_path, "WEBP")
+            else:
+                os.makedirs(os.path.dirname(webp_path), exist_ok=True)
+                img_obj = Image.open(img_data)
+                img_obj.save(webp_path, "WEBP")
 
-
-            except Exception as e:
-                print(f"Failed to process {img_url}: {e}")
+            # except Exception as e:
+            #     print(f"Failed to process {img_url}: {e}")
         else:
             print(f"Failed to download {img_url}. Status Code: {img_response.status_code}")
-
     return
 
-
 def get_json_info(soup, json_path):
-    time.sleep(.1)
-    try:
-        # Trainer
-        
+    is_trainer = is_trainer_card(soup)
+    if is_trainer:
+        # We have a Trainer!
+        name, expansion, trainer_category, description, rarity, illustrator = get_trainer_info(soup) #Already have category: Tool, Item, Supporter
+        t = Trainer(name, expansion, trainer_category, description, rarity, illustrator)
+        t.append_to_json(json_path)
 
-        # Pokemon
-        name = soup.find(class_="card-text-name").text.strip()
-        expansion = soup.find(class_="text-lg").text.strip()
-        rarity = get_card_rarity(soup)
-
-        title = soup.find(class_="card-text-title").text.replace(" ", "").replace("\t", "").replace("\n", "")
-        card_type, hp = tokenize_card_title(title)
- 
-        stage_tok = soup.find(class_="card-text-type").text.strip().split("-")
-        stage = stage_tok[1].strip()
-
-        token = soup.find(class_="card-text-wrr").text.strip()
-        pattern = r"Weakness:\s*(\S+).*?Retreat:\s*(\d+)"
-        match = re.search(pattern, token, re.DOTALL)
-        if match:
-            weakness = match.group(1)  
-            retreat = match.group(2) 
-        else:
-            print("No match found in:", token)
-        
-        illustrator = soup.find(class_= "card-text-section card-text-artist").text.replace(" ", "").replace("\t", "").replace("\n", "")
-        attack_infos = soup.find_all("p", class_="card-text-attack-info")
-        abilities = []
-        energy_dict_list = []
-
-        for attack in attack_infos:
-            ability_dict = {}
-            text = attack.get_text(separator=" ", strip=True) 
-            words = text.split()  
-            
-            energy_dict = get_energy_cost(words[0])
-            energy_dict_list.append(energy_dict)
-
-            words = words[1:]
-
-            if len(words) >= 2:
-                ability_name = " ".join(words[:-1])
-                ability_damage = words[-1]
-            else:
-                ability_name = "Null"
-                ability_damage = 0
-
-            ability_dict[ability_name] = ability_damage 
-            abilities.append(ability_dict)
-
-        
-        #p = Pokemon.Pokemon(name, expansion, hp, card_type, stage, ability_dict, None, weakness, retreat, illustrator)
-        #p.append_to_json(json_path)
+        print(f"{colors['GB1']}Trainer: {name}{colors['Reset']}, "
+              f"{colors['GB2']}Expansion: {expansion}{colors['Reset']}, "
+              f"\n{colors['GB3']}Description: {description}{colors['Reset']}\n "
+              f"{colors['GB4']}Category {trainer_category}{colors['Reset']}, "
+              f"{colors['GB5']}Rarity = {rarity}{colors['Reset']}, "
+              f"{colors['GB6']}Illustrator = {illustrator}{colors['Reset']}, \n"
+            ) 
+        return
+    
+    else:
+        # We have a Pokemon!
+        name, expansion, hp, card_type, rarity, stage, ability_dict, weakness, retreat, illustrator, energy_dict_list, abilities, special_ability_name, special_ability_description = get_pokemon_info(soup)
+        p = Pokemon(name, expansion, hp, card_type, rarity, stage, ability_dict, None, energy_dict_list, weakness, retreat, illustrator, special_ability_name, special_ability_description)
+        p.append_to_json(json_path)
 
         print(f"{colors['GB1']}{name}{colors['Reset']}, "
             f"{colors['GB2']}Expansion = {expansion}{colors['Reset']}, "
@@ -244,19 +203,116 @@ def get_json_info(soup, json_path):
             f"{colors['GB6']}Stage = {stage}{colors['Reset']}, "
             f"{colors['GB7']}Weakness = {weakness}{colors['Reset']}, "
             f"{colors['GB8']}Retreat = {retreat}{colors['Reset']},"
+            f"{colors['GB8']} {illustrator}{colors['Reset']}"
             ) 
 
-
-        print(f"\t\U00002728 {colors['GB1']}Abilities = {abilities}{colors['Reset']}", end = " ")  # Output: {'Blot': '10', 'Flame Burst': '30'}
-        display_energy_cost(energy_dict_list)
-        print("\n")
-
-
-    except Exception as e:
-        print(f"Missing information, something went wrong {e}")
+        # print(f"\t\U00002728 {colors['GB1']}Abilities = {abilities}{colors['Reset']}", end = " ")  # Output: {'Blot': '10', 'Flame Burst': '30'}
+        # display_energy_cost(energy_dict_list)
+        # print("\n")
 
     return
 
+def get_pokemon_info(soup):
+    special_ability_name = ""
+    special_ability_description = ""
+
+    if has_special_ability(soup):
+        special_ability_name, special_ability_description = get_special_ability(soup)
+
+    name = soup.find(class_="card-text-name").text.strip()
+    expansion = soup.find(class_="text-lg").text.strip()
+    rarity = get_card_rarity(soup)
+
+    title = soup.find(class_="card-text-title").text.replace(" ", "").replace("\t", "").replace("\n", "")
+    card_type, hp = tokenize_card_title(title)
+
+    stage_tok = soup.find(class_="card-text-type").text.strip().split("-")
+    stage = stage_tok[1].strip()
+
+    token = soup.find(class_="card-text-wrr").text.strip()
+    pattern = r"Weakness:\s*(\S+).*?Retreat:\s*(\d+)"
+    match = re.search(pattern, token, re.DOTALL)
+    if match:
+        weakness = match.group(1)  
+        retreat = match.group(2) 
+    else:
+        print("No match found in:", token)
+    
+    illustrator_token_div = soup.find(class_="card-text-section card-text-artist")
+    illustrator = illustrator_token_div.find("a").text.strip().title()
+    attack_infos = soup.find_all("p", class_="card-text-attack-info")
+    abilities = []
+    energy_dict_list = []
+    ability_dict = {}
+    for attack in attack_infos:
+        text = attack.get_text(separator=" ", strip=True) 
+        words = text.split()
+
+        energy_dict = get_energy_cost(words[0])
+        energy_dict_list.append(energy_dict)
+
+        words = words[1:]
+
+        if len(words) >= 2:
+            ability_name = " ".join(words[:-1])
+            ability_damage = words[-1]
+        else:
+            ability_name = words[0]
+            ability_damage = 0
+
+        ability_dict[ability_name] = ability_damage
+        abilities.append(ability_dict)
+    
+    return name, expansion, hp, card_type, rarity, stage, ability_dict, weakness, retreat, illustrator, energy_dict_list, abilities, special_ability_name, special_ability_description
+
+def has_special_ability(soup):
+        ability = soup.find(class_="card-text-ability-info")
+        if ability == None:
+            return False
+        return True
+
+def get_special_ability(soup):
+    special_ability_name = soup.find(class_="card-text-ability-info").text.split("Ability:")[1].strip()
+    special_ability_description = soup.find(class_="card-text-ability-effect").text.replace("\t", "").replace("\n", "").replace("\r", "").strip()
+    return special_ability_name, special_ability_description
+
+def is_trainer_card(soup):
+    token = soup.find(class_="card-text-type").text.strip().split("-")
+
+    if len(token) < 2:
+        return False
+    
+    match_str = " - ".join(token)
+
+    pattern = r"(\w+)\s*-\s*(\w+)"
+    match = re.match(pattern, match_str)
+
+    if match:
+        category, subcategory = match.groups()
+        
+        if category == "Trainer":
+            return True
+        else:
+            return False
+
+    return False
+
+def get_trainer_info(soup):
+    rarity = get_card_rarity(soup)
+    expansion = soup.find(class_="text-lg").text.strip()
+    card_desc_section_token = soup.find_all("div", class_="card-text-section")
+    
+    if len(card_desc_section_token) > 1:
+        name = card_desc_section_token[0].get_text(separator=" ", strip=True).split(" ")[0]
+        trainer_category = card_desc_section_token[0].get_text(separator="- ", strip=True).split(" ")[-1]
+        description = card_desc_section_token[1].get_text(separator=" ", strip=True).strip()
+    else:
+        name = card_desc_section_token[0].get_text(separator=" ", strip=True).split(" ")[0]
+
+    illustrator_token_div = soup.find(class_="card-text-section card-text-artist")
+    illustrator = illustrator_token_div.find("a").text.strip().title()
+
+    return name, expansion, trainer_category, description, rarity, illustrator
 
 def get_card_rarity(soup):
     second_span = soup.select_one(".prints-current-details span:nth-of-type(2)")
@@ -283,7 +339,6 @@ def get_card_rarity(soup):
             return rarity_value
 
     return "unknown"
-
 
 def tokenize_card_title(title):
     parts = title.rsplit('-', 2)         # Split from the right, at most 2 times

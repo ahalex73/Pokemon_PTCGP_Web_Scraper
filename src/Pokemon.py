@@ -2,14 +2,17 @@ import json
 import os
 
 class Pokemon:
-    def __init__(self, name: str, expansion: str, hp: int, pokemon_type: str, rarity: str, stage: str, abilities_dict: dict, ability_description_array: list, weakness: str, retreat: int, illustrator: str):
+    def __init__(self, name: str, expansion: str, hp: int, pokemon_type: str, rarity: str, stage: str, abilities_dict: dict, ability_description_array: list, energy_dict_list: list, weakness: str, retreat: int, illustrator: str, special_ability_name: str, special_ability_description:str):
         self.name = name
         self.expansion = expansion
         self.hp = hp
         self.pokemon_type = pokemon_type
+        self.rarity = rarity
         self.stage = stage
         self.abilities_dict = abilities_dict
-        self.abilities_description_array = []
+        self.special_ability_name = special_ability_name
+        self.special_ability_description = special_ability_description
+        self.energy_dict_list = energy_dict_list
         self.weakness = weakness
         self.retreat = retreat
         self.illustrator = illustrator
@@ -46,5 +49,5 @@ class Pokemon:
         with open(filename, "w") as file:
             json.dump(data, file, indent=4)
 
-        print(f"Added {self.name} to {filename}")
+        #print(f"Added {self.name} to {filename}")
 

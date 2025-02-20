@@ -2,16 +2,11 @@ import json
 import os
 
 class Trainer:
-    def __init__(self, name: str, expansion: str, hp: int, pokemon_type: str, stage: str, abilities_dict: dict, ability_description_array: list, weakness: str, retreat: int, illustrator: str):
+    def __init__(self, name: str, expansion: str, trainer_category: str, description: str, rarity: str, illustrator:str):
         self.name = name
         self.expansion = expansion
-        self.hp = hp
-        self.pokemon_type = pokemon_type
-        self.stage = stage
-        self.abilities_dict = abilities_dict
-        self.abilities_description_array = []
-        self.weakness = weakness
-        self.retreat = retreat
+        self.trainer_category = trainer_category        # Tool, Supporter, Item... 
+        self.description = description
         self.illustrator = illustrator
 
 
@@ -20,31 +15,28 @@ class Trainer:
         return self.__dict__
     
     def convert_to_json(self, filename: str):
-        """ Convert Pokemon class object into JSON and save to a file """
+        """ Convert Trainer class object into JSON and save to a file """
         with open(filename, "w") as file:
             json.dump(self.__dict__, file, indent=4)
         print(f"JSON data saved to {filename}")
 
     def append_to_json(self, filename: str):
-        """Appends a Pokémon object to a JSON file dynamically."""
-        # Check if the file exists and has valid JSON
+        """Appends a Trainer object to a JSON file dynamically."""
         if os.path.exists(filename):
             with open(filename, "r") as file:
                 try:
                     data = json.load(file)
-                    if not isinstance(data, list):  # Ensure it's a list
+                    if not isinstance(data, list):  
                         data = []
                 except json.JSONDecodeError:
-                    data = []  # If JSON is corrupt, reset to empty list
+                    data = [] 
         else:
             data = []
 
-        # Append the new Pokémon
         data.append(self.to_dict())
 
-        # Write back the updated JSON
         with open(filename, "w") as file:
             json.dump(data, file, indent=4)
 
-        print(f"Added {self.name} to {filename}")
+        #print(f"Added {self.name} to {filename}")
 
